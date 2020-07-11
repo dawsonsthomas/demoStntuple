@@ -1,0 +1,30 @@
+#!/bin/bash
+
+dir=include
+
+# echo pwd  `pwd`
+
+#------------------------------------------------------------------------------
+# 'demoStntuple' and its subpackages, excluding Stntuple
+#------------------------------------------------------------------------------
+if [ ! -d ../$dir/demoStntuple ] ; then mkdir -p ../$dir/demoStntuple ; fi
+
+for d in ana mod ; do
+    if [[ -e demoStntuple/$d ]] && [[ ! -e $dir/demoStntuple/$d ]] ; then 
+	echo `pwd`$0 : creating symbolic link $dir/demoStntuple/$d
+	ln -s ../../demoStntuple/$d/$d $dir/demoStntuple/$d
+    fi
+done
+
+#------------------------------------------------------------------------------
+# demoStntuple/Stntuple and its subpackages
+#------------------------------------------------------------------------------
+# if [ ! -d ../$dir/Stntuple ] ; then mkdir -p ../$dir/Stntuple ; fi
+# 
+# # for d in alg base gui loop mod obj val ; do
+# for d in alg base loop mod obj val ; do
+#     if [ ! -e ../$dir/Stntuple/$d ] ; then 
+# 	echo `pwd`$0 : creating symbolic link ../$dir/Stntuple/$d
+# 	ln -s ../../demoStntuple/Stntuple/$d/$d ../$dir/Stntuple/$d
+#     fi
+# done

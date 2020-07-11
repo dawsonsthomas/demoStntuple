@@ -1,0 +1,11 @@
+#ifndef muminuseplus_ana_scripts_modules_hh
+#define muminuseplus_ana_scripts_modules_hh
+//-----------------------------------------------------------------------------
+// modules defined in 'muminuseplus' package (libmuminuseplus_ana.so)
+//-----------------------------------------------------------------------------
+class TMuminuseplusAna001Module;
+
+TMuminuseplusAna001Module*       m_ptrk   = NULL;
+
+#endif
+

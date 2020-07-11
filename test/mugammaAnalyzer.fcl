@@ -1,0 +1,212 @@
+# -*- mode: tcl -*-
+#include "fcl/minimalMessageService.fcl"
+#include "fcl/standardProducers.fcl"
+#include "fcl/standardServices.fcl"
+#include "CaloCluster/fcl/prolog_trigger.fcl"
+
+
+BEGIN_PROLOG
+HitMakerBlindTime : 0
+END_PROLOG
+
+
+
+process_name : rpcAnalyzer
+#process_name : generateRPC
+
+#------------------------------------------------------------------------------
+# input module definition
+#------------------------------------------------------------------------------
+source : { 
+#    module_type : EmptyEvent
+    module_type : RootInput
+     # inputCommands : ['keep *_*_*_*'
+     # 		     ]  
+}
+#------------------------------------------------------------------------------
+# services section
+#------------------------------------------------------------------------------
+services : {
+    message               : @local::default_message
+
+    #TFileService          : { fileName : "rmcLikelihoods_4_28_19.root" }
+    TFileService          : { fileName : "rmcTemplate_4_28_19.root" }
+
+    RandomNumberGenerator : { }
+    #   Timing                : { }
+
+    GeometryService        : { inputFile      : "Mu2eG4/geom/geom_common.txt"          }
+    ConditionsService      : { conditionsfile : "Mu2eG4/test/conditions_01.txt"        }
+    GlobalConstantsService : { inputFile      : "Mu2eG4/test/globalConstants_01.txt"   }
+    G4Helper               : { }
+    BTrkHelper             : @local::BTrkHelperDefault
+    SeedService            : { @table::automaticSeeds
+	baseSeed         :  0
+	maxUniqueEngines :  20
+    }
+    
+    TimeTracker : {
+	printSummary : true
+	dbOutput : {
+	    filename  : ""
+	    overwrite : false
+	}
+    }
+}
+
+services.scheduler.wantSummary: true
+#------------------------------------------------------------------------------
+# reconstruction and analysis modules
+#------------------------------------------------------------------------------
+physics : {
+    producers: {
+
+#	@table::CaloClusterTriggger.producers	
+	@table::CommonMC.producers
+	@table::CaloDigiMC.producers
+
+	generate   : { 
+	    module_type : StoppedParticleRPCGun
+
+            pionStops   : {
+                inputFiles             : [ "mergedMuonStops/nts.mu2e.pion-DS-TGTstops.MDC2018a.001002_00000000.root" ]
+                averageNumRecordsToUse : 500000
+                treeName               : "stoppedPionDumper/stops"
+                branchName             : "stops"
+                verbosityLevel         : 1
+            }
+	    
+	    physics : {
+		spectrumResolution : 0.001
+                elow               : 70
+                ehi                : 140
+                spectrumShape      : Bistirlich
+	    }
+	    
+	    czmin  : 0.99
+	    czmax  : 0.999
+	}
+
+	g4run                : @local::g4run
+
+	CaloClusterFast                   : { @table::CaloClusterTrigger.producers.CaloClusterFast
+#	    windowPeak : 3
+#	    extendSecond          : true
+	    includeCrystalHits    : true
+	    minEnergy               : 50
+	}
+	
+    }
+
+    filters: {
+	#--------------------------------------------------------------------------------
+	# CalPatRec sequence
+	#--------------------------------------------------------------------------------
+	@table::CalPatRec.filters
+	
+	RPCPhotonAna   : {
+	    module_type          : RPCPhotonAna	    
+	    generatorModuleLabel   : "compressDigiMCs"
+#	    generatorModuleLabel   : "generate"
+	    weightModuleLabel      : "generate"
+	    caloClusterModuleLabel : "CaloClusterFast"
+	    virtualDetectorName    : "compressDigiMCs:virtualdetector"
+#	    virtualDetectorName    : "g4run:virtualdetector"
+	    TimeOffsets            : { inputs : [ "compressDigiMCs:protonTimeMap", "compressDigiMCs:muonTimeMap" ] }
+#	    TimeOffsets            : { inputs : [ "protonTimeMap", "muonTimeMap" ] }
+	    TimeFoldingBuffer      : 100 #ns
+	    blindTime              : 0 #ns
+	    signalTemplates        : "mugammaTemplate_2_18_19.root"
+	    backgroundTemplates    : "bkgTemplates_2_14_19.root"
+	}
+
+	# Andrej's filter
+	# Reject events with no hits from signal-like tracks in the detectors.  
+	# The filter does not look at the background hits from mixed events.
+	#------------------------------------------------------------------------------
+	
+	CaloShowerSimFilter : {
+	    module_type : CaloShowerSimFilter
+	    MinEnergySum            : 10.
+#	    CaloShowerSimCollection : "compressDigiMCs"
+	    particleTypes           : [ 22 ] #only photons
+	}
+
+	#------------------------------------------------------------------------------
+	# event display
+	#------------------------------------------------------------------------------
+	# MuHitDisplay  : { @table::MuHitDisplay 
+	#     generatorModuleLabel         : "generate"
+	#     g4ModuleLabel                : "g4run"
+ 	#     trkRecoModuleLabel           : CalTrkFit
+	# }
+    }
+
+    analyzers:
+    {
+
+	TrkTriggerDiag : {
+	    module_type : TrkTriggerDiag
+	}
+	
+    } 
+  
+    all  : [
+	    generate, 
+	    g4run,
+	    @sequence::CommonMC.TimeMaps,
+	    @sequence::CaloDigiMC.DigiSim,
+#	    CaloShowerSimFilter,
+	    CaloClusterFast,
+	    RPCPhotonAna
+	    #
+	    #	     MuHitDisplay
+	   ]
+
+    ana  : [
+#	    CaloShowerSimFilter,
+	    CaloClusterFast,
+	    RPCPhotonAna
+	    #
+	    #	     MuHitDisplay
+	   ]
+
+   # trigger_paths  : [all]
+    trigger_paths  : [ana]
+
+    #    trigger_paths  : [display]
+
+#    out : [detectorOutput]
+    out : []
+
+    end_paths      : [out]
+}
+
+outputs: {
+    detectorOutput : {
+        module_type : RootOutput
+	#        SelectEvents: [all]
+        SelectEvents  : [all]
+        outputCommands:   [ "keep *_*_*_*" ]
+        fileName      : "/mu2e/data/users/heatherh/rpcAnalyzer_20181106.art"
+	#        fileName    : "e11s6220.art"
+    }
+}
+#------------------------------------------------------------------------------
+# redefinitions
+#------------------------------------------------------------------------------
+# physics.producers.generate.inputfile      :"gianipez/test/caloDigi/genconfig_calo_eminus.txt"
+# physics.producers.MakeCaloCompressedHits.physVolInfoInput    : "dioMixer"
+
+services.SeedService.baseSeed             :  0
+services.SeedService.maxUniqueEngines     :  20
+
+physics.producers.CaloShowerStepROFromShowerStep.blindTime     : 100
+physics.producers.CaloDigiFromShower.blindTime                 : 100
+
+physics.producers.CaloClusterFast.blindTime                    : 100
+# Set mean values for the number of events to mix for each process.
+# These are relative to a single proton on target.
+# See docdb-6273
+
+

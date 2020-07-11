@@ -1,0 +1,20 @@
+* WHAT TO DO WHEN YOU LOG IN
+setup mu2e`
+cd /mu2e/app/users/mhwhalen/dev
+source setup.sh
+* PARTICLE-TYPES AKA PDG CODES
+  file:/mu2e/app/users/mwhalen/dev/DataProducts/inc/PDGCode.hh
+* HOW TO RUN A MU2E EVENT DISPLAY
+mu2e -c mwhalen/test/hitDisplay.fcl -s /mu2e/data/users/gianipez/data/v6_5/v6_5_0001/sim.gianipez.bbb.ccc.read_reco_stn_tcn.art
+** HOW TO NAVIGATE WITHIN THE EVENT FROM THE TERMINAL
+d=TAnaDump::Instance()
+
+** HOW TO PRINT LIST OF TIME-CLUSTERS
+d->printTimeClusterCollection("TimeClusterFinder", "", "", 1, "makePH")
+
+** HOW TO PRINT HELIX CANDIDATES
+d->printHelixSeedCollection("CalHelixFinder", "", "", 1)
+For positive ellicity (still downstream electron): d->printHelixSeedCollection("HelixFinder:Positive", "", "", 1)
+
+** HOW TO PRINT TRACKSEEDS
+d->printTrackSeedCollection("CalSeedFit", "", "", 1)

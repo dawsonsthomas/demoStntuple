@@ -1,0 +1,13 @@
+/pnfs/mu2e/scratch/users/gianipez/workflow/NoTprDIO65MeVCut/outstage/9316576/00/00000/sim.gianipez.skimNoTprTrackDIO65MeVCut.v090500.004001_00000000.art
+/pnfs/mu2e/scratch/users/gianipez/workflow/NoTprDIO65MeVCut/outstage/9316576/00/00001/sim.gianipez.skimNoTprTrackDIO65MeVCut.v090500.004001_00001600.art
+/pnfs/mu2e/scratch/users/gianipez/workflow/NoTprDIO65MeVCut/outstage/9316576/00/00002/sim.gianipez.skimNoTprTrackDIO65MeVCut.v090500.004001_00003200.art
+/pnfs/mu2e/scratch/users/gianipez/workflow/NoTprDIO65MeVCut/outstage/9316576/00/00003/sim.gianipez.skimNoTprTrackDIO65MeVCut.v090500.004001_00004800.art
+/pnfs/mu2e/scratch/users/gianipez/workflow/NoTprDIO65MeVCut/outstage/9316576/00/00004/sim.gianipez.skimNoTprTrackDIO65MeVCut.v090500.004001_00006400.art
+/pnfs/mu2e/scratch/users/gianipez/workflow/NoTprDIO65MeVCut/outstage/9316576/00/00005/sim.gianipez.skimNoTprTrackDIO65MeVCut.v090500.004001_00008000.art
+/pnfs/mu2e/scratch/users/gianipez/workflow/NoTprDIO65MeVCut/outstage/9316576/00/00006/sim.gianipez.skimNoTprTrackDIO65MeVCut.v090500.004001_00009600.art
+/pnfs/mu2e/scratch/users/gianipez/workflow/NoTprDIO65MeVCut/outstage/9316576/00/00007/sim.gianipez.skimNoTprTrackDIO65MeVCut.v090500.004001_00011200.art
+/pnfs/mu2e/scratch/users/gianipez/workflow/NoTprDIO65MeVCut/outstage/9316576/00/00008/sim.gianipez.skimNoTprTrackDIO65MeVCut.v090500.004001_00012800.art
+/pnfs/mu2e/scratch/users/gianipez/workflow/NoTprDIO65MeVCut/outstage/9316576/00/00009/sim.gianipez.skimNoTprTrackDIO65MeVCut.v090500.004001_00014400.art
+/pnfs/mu2e/scratch/users/gianipez/workflow/NoTprDIO65MeVCut/outstage/9316576/00/00010/sim.gianipez.skimNoTprTrackDIO65MeVCut.v090500.004001_00016000.art
+/pnfs/mu2e/scratch/users/gianipez/workflow/NoTprDIO65MeVCut/outstage/9316576/00/00011/sim.gianipez.skimNoTprTrackDIO65MeVCut.v090500.004001_00017600.art
+/pnfs/mu2e/scratch/users/gianipez/workflow/NoTprDIO65MeVCut/outstage/9316576/00/00012/sim.gianipez.skimNoTprTrackDIO65MeVCut.v090500.004001_00019200.art

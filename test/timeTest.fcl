@@ -1,0 +1,141 @@
+# -*- mode:tcl -*-
+#------------------------------------------------------------------------------
+# read input file with pre-mixed (at a level of StepPointMC's) background events, 
+# run digitization 
+#
+# example:
+# --------
+# murat/scripts/submit_mu2e_job -v -c murat/test/conv_mixcd3_x1_stnmaker.fcl -S $PWD/datasets/ccd35600-local \
+#                               -f 1:@bgHitFiles:datasets/cd3-detmix-cut-local-v2 -n 10 
+#------------------------------------------------------------------------------
+#include "fcl/minimalMessageService.fcl"
+#include "fcl/standardProducers.fcl"
+#include "fcl/standardServices.fcl"
+
+#include "Stntuple/fcl/prolog.fcl"
+
+BEGIN_PROLOG
+bgHitFiles                          :  @nil
+  G4_MODULE_LABEL                     : "g4run"          # for normal generators and Ralf's cosmics
+END_PROLOG
+
+#include "Stntuple/fcl/templates.fcl"
+
+process_name : stnmakerCE
+
+source       : { 
+    module_type : RootInput 
+}
+services : {
+    message               : @local::default_message
+    #    TFileService          : { fileName : "b01s6220.hist" }
+    TFileService          : { fileName : "nts.bkg_only.jobtype.offver.sequencer.root" }
+
+    RandomNumberGenerator : { }
+    #   Timing                : { }
+
+    GeometryService        : { inputFile      : "Mu2eG4/geom/geom_common.txt"          }
+    ConditionsService      : { conditionsfile : "Mu2eG4/test/conditions_01.txt"        }
+    GlobalConstantsService : { inputFile      : "Mu2eG4/test/globalConstants_01.txt"   }
+    G4Helper               : { }
+    BTrkHelper             : @local::BTrkHelperDefault
+    SeedService            : { @table::automaticSeeds
+	baseSeed         :  0
+	maxUniqueEngines :  20
+    }
+    
+    TimeTracker : {
+	printSummary : true
+	dbOutput : {
+	    filename  : "timeTest.db"
+	    overwrite : false
+	}
+    }
+}
+services.scheduler.wantSummary: true
+
+
+producers    : { @table::Stntuple.producers }
+filters      : { @table::Stntuple.filters   }
+outputs      : { @table::Stntuple.outputs   }
+paths        : { @table::Stntuple.paths     }
+
+physics: { 
+    producers : { @table::producers 
+	generate  : { @table::StoppedParticleReactionGun}
+	
+	CaloClusterFast : { @table::CaloClusterFast.producers.CaloClusterFast
+	    extendSecond          : true
+	    minEnergy             : 40
+	}
+
+	HelixFinder : { @table::Tracking.producers.HelixFinder	}
+	
+    }
+
+    filters : { @table::filters
+	InitStntuple  : { @table::Stntuple.filters.InitStntuple 
+	    histFileName : "b51s7130.stn"  
+	}
+	
+	CalTimePeakFinder : { @table::CalPatRec.filters.CalTimePeakFinder
+	    minClusterEnergy   : 40.    # MeV
+	}
+    }
+
+    @table::paths
+
+
+    p1: [ @sequence::CaloClusterFast.Reco, @sequence::TrkHitReco.PrepareHits, CalTimePeakFinder, DeltaFinder, CalHelixFinderDem, CalSeedFitDem, CalTrkFitDem,
+	  #
+	  @sequence::CaloClusterFast.Reco, @sequence::TrkHitReco.PrepareHits, CalTimePeakFinder, DeltaFinder, CalHelixFinderDep, CalSeedFitDep, CalTrkFitDep,
+	  #
+	  @sequence::TrkHitReco.PrepareHits, @sequence::Tracking.TPRDeM,
+	  #
+	  @sequence::TrkHitReco.PrepareHits, @sequence::Tracking.TPRDeP,
+	  #
+	  MergePatRecTprDem, MergePatRecTprDep,
+	  MergePatRecCprDem, MergePatRecCprDep,
+	  #
+	  @sequence::trkCaloMatchingCprDemSeq,
+	  @sequence::trkCaloMatchingCprDepSeq,
+	  #
+	  @sequence::trkCaloMatchingTprDemSeq,
+	  @sequence::trkCaloMatchingTprDepSeq
+	  #
+#	  @sequence::stnmaker_trig_seq
+	 ]
+    
+#    trigger_paths : [  gen ]
+    trigger_paths : [  p1 ]
+#    out           : [detectorOutput]
+    out           : []
+    end_paths     : [ out ]
+}
+
+# Temporarily use Andy's muon stops.  These will be replaced soon with MDC2018 output
+physics.producers.generate.muonStops.inputFiles               : [ "mergedMuonStops/nts.mu2e.DS-TGTstops.MDC2018a.001002_00000000.root" ]
+
+physics.filters.StntupleMakerTcmTrig.caloClusterMaker         : "CaloClusterFast"
+physics.filters.StntupleMakerTcmTrig.makeStrawDigiModuleLabel : "compressDigiMCs"
+physics.filters.StntupleMakerTcmTrig.g4ModuleLabel            : "compressDigiMCs"
+physics.filters.StntupleMakerTcmTrig.makeVdetHitsModuleLabel  : "compressDigiMCs"
+physics.filters.StntupleMakerTcmTrig.makeVirtualHits          : 0
+physics.filters.StntupleMakerTcmTrig.makeSimpModuleLabel      : "compressDigiMCs"
+physics.filters.StntupleMakerTcmTrig.makeSimp                 : 0
+physics.filters.StntupleMakerTcmTrig.TimeOffsets              : { inputs : [ "compressDigiMCs:protonTimeMap", "compressDigiMCs:muonTimeMap" ] }
+physics.filters.CalTimePeakFinder.caloClusterModuleLabel      : "CaloClusterFast"
+physics.producers.TrackCaloMatchingCprDem.caloClusterModuleLabel : "CaloClusterFast"
+physics.producers.TrackCaloMatchingCprDep.caloClusterModuleLabel : "CaloClusterFast"
+physics.producers.TrackCaloMatchingTprDem.caloClusterModuleLabel : "CaloClusterFast"
+physics.producers.TrackCaloMatchingTprDep.caloClusterModuleLabel : "CaloClusterFast"
+
+#------------------------------------------------------------------------------
+# uncomment to write the DST out
+#------------------------------------------------------------------------------
+# physics.out : [detectorOutput]
+# outputs.detectorOutput.fileName           : "/mu2e/data/users/gianipez/data/b01s7050.art"
+#------------------------------------------------------------------------------
+# everything below is appended by murat/scripts/submit_mu2e_job
+#------------------------------------------------------------------------------
+# services.TFileService          : { fileName : "b01e7050.hist" }
