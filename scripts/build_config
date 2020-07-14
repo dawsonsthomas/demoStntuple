@@ -7,7 +7,7 @@ dir=include
 #------------------------------------------------------------------------------
 # 'demoStntuple' and its subpackages, excluding Stntuple
 #------------------------------------------------------------------------------
-if [ ! -d ../$dir/demoStntuple ] ; then mkdir -p ../$dir/demoStntuple ; fi
+if [ ! -d $dir/demoStntuple ] ; then mkdir -p $dir/demoStntuple ; fi
 
 for d in ana mod ; do
     if [[ -e demoStntuple/$d ]] && [[ ! -e $dir/demoStntuple/$d ]] ; then 

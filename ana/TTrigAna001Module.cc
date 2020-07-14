@@ -2125,7 +2125,7 @@ int TTrigAna001Module::BeginJob() {
   RegisterDataBlock("StrawDataBlock"   ,"TStrawDataBlock"        ,&fStrawDataBlock   );
   RegisterDataBlock("GenpBlock"        ,"TGenpBlock"             ,&fGenpBlock        );
   RegisterDataBlock("SimpBlock"        ,"TSimpBlock"             ,&fSimpBlock        );
-  RegisterDataBlock("VdetBlock"        ,"TVdetDataBlock"         ,&fVdetDataBlock    );
+  RegisterDataBlock("VdetBlock"        ,"TVDetDataBlock"         ,&fVdetDataBlock    );
 
   //-----------------------------------------------------------------------------
   // book histograms

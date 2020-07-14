@@ -1,11 +1,11 @@
-#ifndef heahterh_ana_scripts_modules_hh
-#define heahterh_ana_scripts_modules_hh
+#ifndef demoStntuple_ana_scripts_modules_hh
+#define demoStntuple_ana_scripts_modules_hh
 //-----------------------------------------------------------------------------
-// modules defined in 'heahterh' package (libheahterh_ana.so)
+// modules defined in 'demoStntuple' package (libdemoStntuple_ana.so)
 //-----------------------------------------------------------------------------
-class TTriggerAna001Module;
+class TTrigAna001Module;
 
-TTriggerAna001Module*         m_trig   = NULL;
+TTrigAna001Module*         m_trig   = NULL;
 
 #endif
 
