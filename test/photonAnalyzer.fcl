@@ -1,0 +1,136 @@
+# -*- mode:tcl -*-
+#------------------------------------------------------------------------------
+# read input file with pre-mixed (at a level of StepPointMC's) background events, 
+# run digitization 
+#
+# example:
+# --------
+# murat/scripts/submit_mu2e_job -v -c murat/test/conv_mixcd3_x1_stnmaker.fcl -S $PWD/datasets/ccd35600-local \
+#                               -f 1:@bgHitFiles:datasets/cd3-detmix-cut-local-v2 -n 10 
+#------------------------------------------------------------------------------
+#include "fcl/minimalMessageService.fcl"
+
+#include "fcl/standardProducers.fcl"
+#include "JobConfig/reco/prolog.fcl"
+#include "fcl/standardProducers.fcl"
+#include "fcl/standardServices.fcl"
+#include "Stntuple/fcl/prolog.fcl"
+
+#include "Trigger/fcl/templates.fcl"
+
+process_name : photonAnalyzer
+
+source       : { 
+#    module_type : EmptyEvent 
+    module_type : RootInput 
+}
+services : {@table::Services.SimAndReco
+
+    message               : @local::default_message
+    TFileService          : { fileName : "nts.user.photon_ana.xxx.sequencer.root" }
+#    TFileService          : { fileName : "/mu2e/data/users/gianipez/hist/e01s7210.hist" }
+
+    RandomNumberGenerator  : { }
+
+    G4Helper               : { }
+
+    GeometryService        : { @table::Services.SimAndReco.GeometryService 
+	inputFile      : "Mu2eG4/geom/geom_common.txt"
+	simulatedDetector   : { tool_type: "Mu2e" }
+    }
+
+    ConditionsService      : { @table::Services.SimAndReco.ConditionsService
+	conditionsfile : "Mu2eG4/test/conditions_01.txt"        
+    }
+
+    GlobalConstantsService : { @table::Services.SimAndReco.GlobalConstantsService
+	inputFile      : "Mu2eG4/test/globalConstants_01.txt"   
+    }
+
+    SeedService            : { @table::automaticSeeds
+	baseSeed         :  0
+	maxUniqueEngines :  20
+    }
+    
+    TimeTracker : {
+	printSummary : true
+	dbOutput : {
+	    filename  : ""
+	    overwrite : false
+	}
+    }
+}
+services.scheduler.wantSummary: true
+
+
+producers    : { @table::Trigger.producers }
+filters      : { @table::Trigger.filters   }
+outputs      : { @table::Trigger.outputs   }
+#paths        : { @table::Stntuple.paths     }
+paths        : { @table::Trigger.paths     }
+
+physics: { 
+    producers : { @table::producers 
+	@table::CaloDigiMC.producersMC
+	@table::CaloCluster.producersMC
+
+	@table::Reconstruction.producers
+	@table::Trigger.producers
+    }
+
+
+    filters : { @table::filters
+	@table::Trigger.filters 
+
+	RPCPhotonAna   : {
+	    module_type          : RPCPhotonAna	    
+	    generatorModuleLabel   : "compressDigiMCs"
+#	    generatorModuleLabel   : "generate"
+	    weightModuleLabel      : "none"
+	    caloClusterModuleLabel      : "CaloClusterFast"
+	    caloClusterTruthModuleLabel : "CaloClusterTruthMatch"
+	    virtualDetectorName    : "compressDigiMCs:virtualdetector"
+#	    virtualDetectorName    : "g4run:virtualdetector"
+	    TimeOffsets            : { inputs : [ "compressDigiMCs:protonTimeMap", "compressDigiMCs:muonTimeMap" ] }
+#	    TimeOffsets            : { inputs : [ "protonTimeMap", "muonTimeMap" ] }
+	    signalTemplates        : "none"
+	    backgroundTemplates    : "none"
+	}
+
+
+    }
+
+#    @table::paths
+    #paths for TrkPatRec downstream e- and e+
+    cprSeedDeM_path              : [ 
+				    @sequence::CaloClusterTrigger.Reco,
+				    #@sequence::CaloReco.Reco,
+				    @sequence::CaloDigiMC.TruthMatch,
+				    #@sequence::CaloCluster.Reco,
+				    @sequence::CaloCluster.TruthMatch,
+				     @sequence::TrkHitRecoTrigger.sequences.TTprepareHits,
+				     @sequence::CprTrigger.sequences.KFFDeM,
+				     #
+				     @sequence::TprTrigger.sequences.KFFDeM,
+				     #@sequence::CrvResponsePackage.CrvResponseSequence,
+				     RPCPhotonAna
+				    ]
+    
+    out           : []
+    end_paths     : [ out ]
+}
+
+#physics.producers.KSFDeMH.CheckHelicity                  : false
+physics.producers.TTflagBkgHits.FlagStrawHits             : true
+physics.producers.TTmakeSH.WriteStrawHitCollection        : true
+
+#physics.producers.CaloRecoDigiFromDigi.caloDigiModuleLabel : compressDigiMCs
+#physics.producers.makeSH.StrawDigiCollection               : makeSD
+#physics.filters.EventFilter.eventList : [ 2701, 2053, 364315  ] # [ run1, subrun1, event1, ...]
+
+physics.producers.CaloClusterFast.minEnergy          : 50.
+physics.filters.TTCalTimePeakFinder.minClusterEnergy : 50.
+
+physics.producers.CaloHitTruthMatch.caloShowerSimModuleLabel   : compressDigiMCs
+physics.producers.CaloHitTruthMatch.caloCrystalHitModuleLabel  : CaloClusterFast
+physics.producers.CaloClusterTruthMatch.caloClusterModuleLabel : CaloClusterFast
