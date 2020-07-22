@@ -26,7 +26,7 @@ source : {
 #------------------------------------------------------------------------------
 # services section
 #------------------------------------------------------------------------------
-services : {
+services : {@table::Services.SimAndReco
     message               : @local::default_message
 
     TFileService          : { fileName : "rpcLikelihoods_4_28_19.root" }
@@ -35,11 +35,13 @@ services : {
     RandomNumberGenerator : { }
     #   Timing                : { }
 
-    GeometryService        : { inputFile      : "Mu2eG4/geom/geom_common.txt"          }
+    GeometryService        : { 
+	inputFile           : "Mu2eG4/geom/geom_common.txt"          
+	simulatedDetector   : { tool_type: "Mu2e" }
+    }
     ConditionsService      : { conditionsfile : "Mu2eG4/test/conditions_01.txt"        }
     GlobalConstantsService : { inputFile      : "Mu2eG4/test/globalConstants_01.txt"   }
     G4Helper               : { }
-    BTrkHelper             : @local::BTrkHelperDefault
     SeedService            : { @table::automaticSeeds
 	baseSeed         :  0
 	maxUniqueEngines :  20

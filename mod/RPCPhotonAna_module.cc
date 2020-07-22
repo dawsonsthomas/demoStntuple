@@ -34,6 +34,8 @@
 #include "BTrk/TrkBase/HelixTraj.hh"
 
 #include "MCDataProducts/inc/CaloHitMCTruthCollection.hh"
+#include "MCDataProducts/inc/CaloClusterMCTruthAssn.hh"
+#include "MCDataProducts/inc/CaloHitMCTruthAssn.hh"
 #include "MCDataProducts/inc/GenParticleCollection.hh"
 #include "MCDataProducts/inc/SimParticleCollection.hh"
 #include "MCDataProducts/inc/StepPointMCCollection.hh"
@@ -107,6 +109,12 @@ namespace mu2e {
     };
 
     struct  clusterHist_ {
+      //----------------------------------------//
+      //MC truth info
+      TH1F* pdgIds[3];
+      TH1F* simPartE[3];
+      //----------------------------------------//
+
       TH1F* energy[3];   // reco energy in the cluster 
       TH1F* time  [3];     // reco cluster time
       TH1F* dt    [3];
@@ -207,7 +215,7 @@ namespace mu2e {
 
     void     fillGenHistograms    (const GenParticle*           Gen    );
     void     fillEventHistograms  (const CaloClusterCollection* ClCol  );
-    void     fillClusterHistograms(const CaloCluster*           Cluster);
+    void     fillClusterHistograms(const CaloCluster*           Cluster, ClusterContentMC* ClusterMC, int DirId);
     void     fillVDetHistograms   (const StepPointMC*           Step   );
     void     fillLHHistograms     (const CaloClusterCollection* ClCol  );
 
@@ -235,19 +243,19 @@ namespace mu2e {
     std::string                _weightModuleLabel;
 
     std::string                _caloClusterModuleLabel;
+    std::string                _caloClusterTruthModuleLabel;
 
     std::string                _virtualDetectorLabel;
 
     SimParticleTimeOffset      _toff;     // time offset smearing
     double                     _mbtime;
-    double                     _mbbuffer;
-    double                     _blindTime;
     
     std::string                _signalTemplateFile;
     std::string                _bkgTemplateFile;
 
     double                     _minRDist   , _rDistStep;
-   
+    const Calorimeter*         _calorimeter ; // cached pointer to the calorimeter geometry
+
     //histograms collectors
     particleHist_   _hGen;
     particleHist_   _hVDet;
@@ -328,87 +336,89 @@ namespace mu2e {
     _generatorModuleLabel        (pset.get<string>("generatorModuleLabel")),
     _weightModuleLabel           (pset.get<string>("weightModuleLabel")),
     _caloClusterModuleLabel      (pset.get<string>("caloClusterModuleLabel")),
-    _virtualDetectorLabel        (pset.get<string>("virtualDetectorName")),
+    _caloClusterTruthModuleLabel (pset.get<std::string>("caloClusterTruthModuleLabel")),
+    _virtualDetectorLabel         (pset.get<string>("virtualDetectorName")),
     _toff                        (pset.get<fhicl::ParameterSet>("TimeOffsets", fhicl::ParameterSet())),
-    _mbbuffer                    (pset.get<double>("TimeFoldingBuffer")),  // ns
-    _blindTime                   (pset.get<double>("blindTime" )) ,         // ns
     _signalTemplateFile          (pset.get<string>("signalTemplates")),
     _bkgTemplateFile             (pset.get<string>("backgroundTemplates")),
     _minRDist                    (pset.get<double>("minClusterRadialDist" ,  350.)),   // mm
     _rDistStep                   (pset.get<double>("clusterRadialDistStep",   50.)){
 
-      ConfigFileLookupPolicy configFile;
-      _signalTemplateFile = configFile(_signalTemplateFile);
-      _bkgTemplateFile    = configFile(_bkgTemplateFile);
+      if (_signalTemplateFile != "none" || _bkgTemplateFile != "none"){
+	
+	ConfigFileLookupPolicy configFile;
+	_signalTemplateFile = configFile(_signalTemplateFile);
+	_bkgTemplateFile    = configFile(_bkgTemplateFile);
+	
+	TFile* signal = TFile::Open(_signalTemplateFile.c_str());
+	TFile* bkg    = TFile::Open(_bkgTemplateFile.c_str());
 
-      TFile* signal = TFile::Open(_signalTemplateFile.c_str());
-      TFile* bkg    = TFile::Open(_bkgTemplateFile.c_str());
-
-      //get the templates histograms
-      _bkgEnergy    = (TH1F*)bkg->Get("RPCPhotonAna/cluster_all/cl_E0");
-      _bkgTime      = (TH1F*)bkg->Get("RPCPhotonAna/cluster_all/cl_time0");
-      _bkgnCr       = (TH1F*)bkg->Get("RPCPhotonAna/cluster_all/cl_nCr0");
-      _bkgrDist     = (TH1F*)bkg->Get("RPCPhotonAna/cluster_all/cl_rDist0");
-      _bkge1eRatio  = (TH1F*)bkg->Get("RPCPhotonAna/cluster_all/cl_e1eRatio0");
-      _bkge2eRatio  = (TH1F*)bkg->Get("RPCPhotonAna/cluster_all/cl_e2eRatio0");
-      _bkge2e1Ratio = (TH1F*)bkg->Get("RPCPhotonAna/cluster_all/cl_e2e1Ratio0");
-      _bkge3eRatio  = (TH1F*)bkg->Get("RPCPhotonAna/cluster_all/cl_e3eRatio0");
-      _bkge4eRatio  = (TH1F*)bkg->Get("RPCPhotonAna/cluster_all/cl_e4eRatio0");
+	//get the templates histograms
+	_bkgEnergy    = (TH1F*)bkg->Get("RPCPhotonAna/cluster_all/cl_E0");
+	_bkgTime      = (TH1F*)bkg->Get("RPCPhotonAna/cluster_all/cl_time0");
+	_bkgnCr       = (TH1F*)bkg->Get("RPCPhotonAna/cluster_all/cl_nCr0");
+	_bkgrDist     = (TH1F*)bkg->Get("RPCPhotonAna/cluster_all/cl_rDist0");
+	_bkge1eRatio  = (TH1F*)bkg->Get("RPCPhotonAna/cluster_all/cl_e1eRatio0");
+	_bkge2eRatio  = (TH1F*)bkg->Get("RPCPhotonAna/cluster_all/cl_e2eRatio0");
+	_bkge2e1Ratio = (TH1F*)bkg->Get("RPCPhotonAna/cluster_all/cl_e2e1Ratio0");
+	_bkge3eRatio  = (TH1F*)bkg->Get("RPCPhotonAna/cluster_all/cl_e3eRatio0");
+	_bkge4eRatio  = (TH1F*)bkg->Get("RPCPhotonAna/cluster_all/cl_e4eRatio0");
     
-      _bkgeRDist    =  (TH2F*)bkg->Get("RPCPhotonAna/cluster_all/cl_eRDist0");
-      _bkge1eRDist  =  (TH2F*)bkg->Get("RPCPhotonAna/cluster_all/cl_e1eRDist0");
-      _bkge2eRDist  =  (TH2F*)bkg->Get("RPCPhotonAna/cluster_all/cl_e2eRDist0");
-      _bkge2e1RDist =  (TH2F*)bkg->Get("RPCPhotonAna/cluster_all/cl_e2e1RDist0");
-      _bkge3eRDist  =  (TH2F*)bkg->Get("RPCPhotonAna/cluster_all/cl_e3eRDist0");
-      _bkge4eRDist  =  (TH2F*)bkg->Get("RPCPhotonAna/cluster_all/cl_e4eRDist0");
-      _bkgnCrRDist  =  (TH2F*)bkg->Get("RPCPhotonAna/cluster_all/cl_nCrRDist0");
+	_bkgeRDist    =  (TH2F*)bkg->Get("RPCPhotonAna/cluster_all/cl_eRDist0");
+	_bkge1eRDist  =  (TH2F*)bkg->Get("RPCPhotonAna/cluster_all/cl_e1eRDist0");
+	_bkge2eRDist  =  (TH2F*)bkg->Get("RPCPhotonAna/cluster_all/cl_e2eRDist0");
+	_bkge2e1RDist =  (TH2F*)bkg->Get("RPCPhotonAna/cluster_all/cl_e2e1RDist0");
+	_bkge3eRDist  =  (TH2F*)bkg->Get("RPCPhotonAna/cluster_all/cl_e3eRDist0");
+	_bkge4eRDist  =  (TH2F*)bkg->Get("RPCPhotonAna/cluster_all/cl_e4eRDist0");
+	_bkgnCrRDist  =  (TH2F*)bkg->Get("RPCPhotonAna/cluster_all/cl_nCrRDist0");
                 
-      _signalEnergy     = (TH1F*)signal->Get("RPCPhotonAna/cluster_photon/cl_E1");
-      _signalTime       = (TH1F*)signal->Get("RPCPhotonAna/cluster_photon/cl_time1");
-      _signalnCr        = (TH1F*)signal->Get("RPCPhotonAna/cluster_photon/cl_nCr1");
-      _signalrDist      = (TH1F*)signal->Get("RPCPhotonAna/cluster_photon/cl_rDist1");
-      _signale1eRatio   = (TH1F*)signal->Get("RPCPhotonAna/cluster_photon/cl_e1eRatio1");
-      _signale2eRatio   = (TH1F*)signal->Get("RPCPhotonAna/cluster_photon/cl_e2eRatio1");
-      _signale2e1Ratio  = (TH1F*)signal->Get("RPCPhotonAna/cluster_photon/cl_e2e1Ratio1");
-      _signale3eRatio   = (TH1F*)signal->Get("RPCPhotonAna/cluster_photon/cl_e3eRatio1");
-      _signale4eRatio   = (TH1F*)signal->Get("RPCPhotonAna/cluster_photon/cl_e4eRatio1");
+	_signalEnergy     = (TH1F*)signal->Get("RPCPhotonAna/cluster_photon/cl_E1");
+	_signalTime       = (TH1F*)signal->Get("RPCPhotonAna/cluster_photon/cl_time1");
+	_signalnCr        = (TH1F*)signal->Get("RPCPhotonAna/cluster_photon/cl_nCr1");
+	_signalrDist      = (TH1F*)signal->Get("RPCPhotonAna/cluster_photon/cl_rDist1");
+	_signale1eRatio   = (TH1F*)signal->Get("RPCPhotonAna/cluster_photon/cl_e1eRatio1");
+	_signale2eRatio   = (TH1F*)signal->Get("RPCPhotonAna/cluster_photon/cl_e2eRatio1");
+	_signale2e1Ratio  = (TH1F*)signal->Get("RPCPhotonAna/cluster_photon/cl_e2e1Ratio1");
+	_signale3eRatio   = (TH1F*)signal->Get("RPCPhotonAna/cluster_photon/cl_e3eRatio1");
+	_signale4eRatio   = (TH1F*)signal->Get("RPCPhotonAna/cluster_photon/cl_e4eRatio1");
                 
-      _signaleRDist     = (TH2F*)signal->Get("RPCPhotonAna/cluster_photon/cl_eRDist1");
-      _signale1eRDist   = (TH2F*)signal->Get("RPCPhotonAna/cluster_photon/cl_e1eRDist1");
-      _signale2eRDist   = (TH2F*)signal->Get("RPCPhotonAna/cluster_photon/cl_e2eRDist1");
-      _signale2e1RDist  = (TH2F*)signal->Get("RPCPhotonAna/cluster_photon/cl_e2e1RDist1");
-      _signale3eRDist   = (TH2F*)signal->Get("RPCPhotonAna/cluster_photon/cl_e3eRDist1");
-      _signale4eRDist   = (TH2F*)signal->Get("RPCPhotonAna/cluster_photon/cl_e4eRDist1");
-      _signalnCrRDist   = (TH2F*)signal->Get("RPCPhotonAna/cluster_photon/cl_nCrRDist1");
+	_signaleRDist     = (TH2F*)signal->Get("RPCPhotonAna/cluster_photon/cl_eRDist1");
+	_signale1eRDist   = (TH2F*)signal->Get("RPCPhotonAna/cluster_photon/cl_e1eRDist1");
+	_signale2eRDist   = (TH2F*)signal->Get("RPCPhotonAna/cluster_photon/cl_e2eRDist1");
+	_signale2e1RDist  = (TH2F*)signal->Get("RPCPhotonAna/cluster_photon/cl_e2e1RDist1");
+	_signale3eRDist   = (TH2F*)signal->Get("RPCPhotonAna/cluster_photon/cl_e3eRDist1");
+	_signale4eRDist   = (TH2F*)signal->Get("RPCPhotonAna/cluster_photon/cl_e4eRDist1");
+	_signalnCrRDist   = (TH2F*)signal->Get("RPCPhotonAna/cluster_photon/cl_nCrRDist1");
 
-      //make correlation templates  
-      //cluster energy vs cluster radial distance
-      buildTemplateHist(_signaleRDist, _signalCorrHistEnergy, Form("SignaleRDist"), _minRDist, _rDistStep);
-      buildTemplateHist(_bkgeRDist, _bkgCorrHistEnergy, Form("BkgeRDist"), _minRDist, _rDistStep);
+	//make correlation templates  
+	//cluster energy vs cluster radial distance
+	buildTemplateHist(_signaleRDist, _signalCorrHistEnergy, Form("SignaleRDist"), _minRDist, _rDistStep);
+	buildTemplateHist(_bkgeRDist, _bkgCorrHistEnergy, Form("BkgeRDist"), _minRDist, _rDistStep);
       
-      //E1 (seedHitEnergy/cluster_energy) vs cluster radial distance
-      buildTemplateHist(_signale1eRDist, _signalCorrHiste1e, Form("Signale1eRDist"), _minRDist, _rDistStep);
-      buildTemplateHist(_bkge1eRDist, _bkgCorrHiste1e, Form("Bkge1eRDist"), _minRDist, _rDistStep);
+	//E1 (seedHitEnergy/cluster_energy) vs cluster radial distance
+	buildTemplateHist(_signale1eRDist, _signalCorrHiste1e, Form("Signale1eRDist"), _minRDist, _rDistStep);
+	buildTemplateHist(_bkge1eRDist, _bkgCorrHiste1e, Form("Bkge1eRDist"), _minRDist, _rDistStep);
       
-      //E2 (2nd_HitEnergy/cluster_energy) vs cluster radial distance
-      buildTemplateHist(_signale2eRDist, _signalCorrHiste2e, Form("Signale2eRDist"), _minRDist, _rDistStep);
-      buildTemplateHist(_bkge2eRDist, _bkgCorrHiste2e, Form("Bkge2eRDist"), _minRDist, _rDistStep);
+	//E2 (2nd_HitEnergy/cluster_energy) vs cluster radial distance
+	buildTemplateHist(_signale2eRDist, _signalCorrHiste2e, Form("Signale2eRDist"), _minRDist, _rDistStep);
+	buildTemplateHist(_bkge2eRDist, _bkgCorrHiste2e, Form("Bkge2eRDist"), _minRDist, _rDistStep);
 
-      //E2/E1 (2nd_HitEnergy/seed_energy) vs cluster radial distance
-      buildTemplateHist(_signale2e1RDist, _signalCorrHiste2e1, Form("Signale2e1RDist"), _minRDist, _rDistStep);
-      buildTemplateHist(_bkge2e1RDist, _bkgCorrHiste2e1, Form("Bkge2e1RDist"), _minRDist, _rDistStep);
+	//E2/E1 (2nd_HitEnergy/seed_energy) vs cluster radial distance
+	buildTemplateHist(_signale2e1RDist, _signalCorrHiste2e1, Form("Signale2e1RDist"), _minRDist, _rDistStep);
+	buildTemplateHist(_bkge2e1RDist, _bkgCorrHiste2e1, Form("Bkge2e1RDist"), _minRDist, _rDistStep);
 
-      //E3 (3rd_HitEnergy/cluster_energy) vs cluster radial distance
-      buildTemplateHist(_signale3eRDist, _signalCorrHiste3e, Form("Signale3eRDist"), _minRDist, _rDistStep);
-      buildTemplateHist(_bkge3eRDist, _bkgCorrHiste3e, Form("Bkge3eRDist"), _minRDist, _rDistStep);
+	//E3 (3rd_HitEnergy/cluster_energy) vs cluster radial distance
+	buildTemplateHist(_signale3eRDist, _signalCorrHiste3e, Form("Signale3eRDist"), _minRDist, _rDistStep);
+	buildTemplateHist(_bkge3eRDist, _bkgCorrHiste3e, Form("Bkge3eRDist"), _minRDist, _rDistStep);
 
-      //E3 (4th_HitEnergy/cluster_energy) vs cluster radial distance
-      buildTemplateHist(_signale4eRDist, _signalCorrHiste4e, Form("Signale4eRDist"), _minRDist, _rDistStep);
-      buildTemplateHist(_bkge4eRDist, _bkgCorrHiste4e, Form("Bkge4eRDist"), _minRDist, _rDistStep);
+	//E3 (4th_HitEnergy/cluster_energy) vs cluster radial distance
+	buildTemplateHist(_signale4eRDist, _signalCorrHiste4e, Form("Signale4eRDist"), _minRDist, _rDistStep);
+	buildTemplateHist(_bkge4eRDist, _bkgCorrHiste4e, Form("Bkge4eRDist"), _minRDist, _rDistStep);
 
-      //nCrystals vs cluster radial distance
-      buildTemplateHist(_signalnCrRDist, _signalCorrHistnCr, Form("SignalnCrRDist"), _minRDist, _rDistStep);
-      buildTemplateHist(_bkgnCrRDist, _bkgCorrHistnCr, Form("BkgnCrRDist"), _minRDist, _rDistStep);
+	//nCrystals vs cluster radial distance
+	buildTemplateHist(_signalnCrRDist, _signalCorrHistnCr, Form("SignalnCrRDist"), _minRDist, _rDistStep);
+	buildTemplateHist(_bkgnCrRDist, _bkgCorrHistnCr, Form("BkgnCrRDist"), _minRDist, _rDistStep);
+      }
     }
   //--------------------------------------------------------------------------------
   // routine function used to produce the template histograms 
@@ -470,8 +480,10 @@ namespace mu2e {
     _hCl.e2eRatio [0]     = clDir.make<TH1F>("cl_e2eRatio0 ","2^{nd} most crystalHit energy/E_{cluster}; E^{2nd-max}_{hit}/E_{cluster}"   , 100, 0, 1.);
     _hCl.e2e1Ratio[0]     = clDir.make<TH1F>("cl_e2e1Ratio0","2^{nd} most crystalHit energy/E^{mx}_{hit}; E^{2nd-max}_{hit}/E^{max}_{hit}", 100, 0, 1.);
     _hCl.e3eRatio [0]     = clDir.make<TH1F>("cl_e3eRatio0 ","3^{rd} most crystalHit energy/E_{cluster}; E^{3rd-max}_{hit}/E_{cluster}"   , 100, 0, 1.);
-    _hCl.e4eRatio [0]     = clDir.make<TH1F>("cl_e4eRatio0","4^{th} most crystalHit energy/E^{mx}_{hit}; E^{4th-max}_{hit}/E^{max}_{hit}", 100, 0, 1.);
-  
+    _hCl.e4eRatio [0]     = clDir.make<TH1F>("cl_e4eRatio0" ,"4^{th} most crystalHit energy/E^{mx}_{hit}; E^{4th-max}_{hit}/E^{max}_{hit}", 100, 0, 1.);
+    _hCl.pdgIds   [0]     = clDir.make<TH1F>("cl_PDGIds0"   ,"PDGIds of the particles truth matched and from Gen; PDGId", 2241, -20.5, 2220.5);
+    _hCl.simPartE [0]     = clDir.make<TH1F>("cl_simPartE0" ,"Energies of the particles truth matched and from Gen; E_{sim} [MeV]", 400, 0., 200.);
+      
     _hCl.eRDist   [0]     = clDir.make<TH2F>("cl_eRDist0"   ,"r_{cog} vs E_{cluster}; r_{cog} [mm]; E_{cluster} [MeV]"        , 500, 300, 800, 400,   0,   200);
     _hCl.e1eRDist [0]     = clDir.make<TH2F>("cl_e1eRDist0"  ,"r_{cog} vs E1/E_{cluster}; r_{cog} [mm]; E^{max}_{hit}/E_{cluster} "        , 500, 300, 800, 100,   0,   1.2);
     _hCl.e2eRDist [0]     = clDir.make<TH2F>("cl_e2eRDist0"  ,"r_{cog} vs E2/E_{cluster}; r_{cog} [mm]; E^{2nd-max}_{hit}/E_{cluster}"     , 500, 300, 800, 100,   0,   1.2);
@@ -491,6 +503,8 @@ namespace mu2e {
     _hCl.e2e1Ratio[1]     = cl1Dir.make<TH1F>("cl_e2e1Ratio1","2^{nd} most crystalHit energy/E^{mx}_{hit}; E^{2nd-max}_{hit}/E^{max}_{hit}", 100, 0, 1.);
     _hCl.e3eRatio [1]     = cl1Dir.make<TH1F>("cl_e3eRatio1","3^{rd} most crystalHit energy/E_{cluster}; E^{3rd-max}_{hit}/E_{cluster}"   , 100, 0, 1.);
     _hCl.e4eRatio [1]     = cl1Dir.make<TH1F>("cl_e4eRatio1","4^{th} most crystalHit energy/E^{mx}_{hit}; E^{4th-max}_{hit}/E^{max}_{hit}", 100, 0, 1.);
+    _hCl.pdgIds   [1]     = cl1Dir.make<TH1F>("cl_PDGIds1"   ,"PDGIds of the particles truth matched and from Gen; PDGId", 2241, -20.5, 2220.5);
+    _hCl.simPartE [1]     = cl1Dir.make<TH1F>("cl_simPartE1" ,"Energies of the particles truth matched and from Gen; E_{sim} [MeV]", 400, 0., 200.);
   
     _hCl.eRDist   [1]     = cl1Dir.make<TH2F>("cl_eRDist1"   ,"r_{cog} vs E_{cluster}; r_{cog} [mm]; E_{cluster} [MeV]"        , 500, 300, 800, 400,   0,   200);
     _hCl.e1eRDist [1]     = cl1Dir.make<TH2F>("cl_e1eRDist1"  ,"r_{cog} vs E1/E_{cluster}; r_{cog} [mm]; E^{max}_{hit}/E_{cluster} "        , 500, 300, 800, 100,   0,   1.2);
@@ -511,7 +525,9 @@ namespace mu2e {
     _hCl.e2e1Ratio[2]     = cl2Dir.make<TH1F>("cl_e2e1Ratio2","2^{nd} most crystalHit energy/E^{mx}_{hit}; E^{2nd-max}_{hit}/E^{max}_{hit}", 100, 0, 1.);
     _hCl.e3eRatio [2]     = cl2Dir.make<TH1F>("cl_e3eRatio2","3^{rd} most crystalHit energy/E_{cluster}; E^{3rd-max}_{hit}/E_{cluster}"   , 100, 0, 1.);
     _hCl.e4eRatio [2]     = cl2Dir.make<TH1F>("cl_e4eRatio2","4^{th} most crystalHit energy/E^{mx}_{hit}; E^{4th-max}_{hit}/E^{max}_{hit}", 100, 0, 1.);
-  
+    _hCl.pdgIds   [2]     = cl2Dir.make<TH1F>("cl_PDGIds2"   ,"PDGIds of the particles truth matched and from Gen; PDGId", 2241, -20.5, 2220.5);
+    _hCl.simPartE [2]     = cl2Dir.make<TH1F>("cl_simPartE2" ,"Energies of the particles truth matched and from Gen; E_{sim} [MeV]", 400, 0., 200.);
+
     _hCl.eRDist   [2]     = cl2Dir.make<TH2F>("cl_eRDist2"   ,"r_{cog} vs E_{cluster}; r_{cog} [mm]; E_{cluster} [MeV]"        , 500, 300, 800, 400,   0,   200);
     _hCl.e1eRDist [2]     = cl2Dir.make<TH2F>("cl_e1eRDist2"  ,"r_{cog} vs E1/E_{cluster}; r_{cog} [mm]; E^{max}_{hit}/E_{cluster} "        , 500, 300, 800, 100,   0,   1.2);
     _hCl.e2eRDist [2]     = cl2Dir.make<TH2F>("cl_e2eRDist2"  ,"r_{cog} vs E2/E_{cluster}; r_{cog} [mm]; E^{2nd-max}_{hit}/E_{cluster}"     , 500, 300, 800, 100,   0,   1.2);
@@ -576,8 +592,8 @@ namespace mu2e {
   }
 
   bool     RPCPhotonAna::beginRun(art::Run& ) {
-    // mu2e::GeomHandle<mu2e::Calorimeter> ch;
-    // _calorimeter = ch.get();
+    mu2e::GeomHandle<mu2e::Calorimeter> ch;
+    _calorimeter = ch.get();
     return true;
   }	
 
@@ -586,6 +602,7 @@ namespace mu2e {
   //--------------------------------------------------------------------------------
   double   RPCPhotonAna::calculate2DProb(double& Ref, double&Variable, TH1F** Template, double MinX, double Step){
     double     thisprob = 1e-17;
+    if (_signalTemplateFile == "none" || _bkgTemplateFile == "none") return thisprob;
 
     for (int j=0; j<kNCorHist; ++j){
       double   ref_min = (MinX + (double)j*Step);
@@ -604,6 +621,8 @@ namespace mu2e {
   double   RPCPhotonAna::calculateProb(double&Variable, TH1F* Template){
 
     double     thisprob = 1;
+    if (_signalTemplateFile == "none" || _bkgTemplateFile == "none") return thisprob;
+
     //not sure how to loop over variable value   i should be event number
     double     binSize   = Template->GetBinWidth(1);
     int        binIndex = (Variable - Template->GetBinLowEdge(1))/binSize;
@@ -653,7 +672,7 @@ namespace mu2e {
     int  nCl = (int)ClCol->size();
     
     //count the number of cluster above the threshold
-    double  e_min(70.);//FIXME!
+    double  e_min(50.);//FIXME!
     int     nCl1(0);
 
     const CaloCluster* cl(0);
@@ -870,7 +889,7 @@ namespace mu2e {
       }
 
       //Skip events that don't pass trigger
-      if(maxLh2DValue < 40)   continue;
+      //if(maxLh2DValue < 40)   continue;
       //Fill historgams of events that pass trigger
       
       _hTrig.energy     ->Fill(clEnergy, _evtWeight);
@@ -912,7 +931,7 @@ namespace mu2e {
   }
 
   //--------------------------------------------------------------------------------//
-  void     RPCPhotonAna::fillClusterHistograms(const CaloCluster*           Cluster){
+  void     RPCPhotonAna::fillClusterHistograms(const CaloCluster*           Cluster, ClusterContentMC* ClusterMC, int dirId){
     
     const CLHEP::Hep3Vector &cog        = Cluster->cog3Vector();
     double                  xpos        = cog.x();
@@ -980,99 +999,111 @@ namespace mu2e {
     }
   
     //fill the cluster info
-    _hCl.energy     [0]->Fill(clEnergy, _evtWeight);
-    _hCl.time       [0]->Fill(clTime, _evtWeight);
-    _hCl.nCr        [0]->Fill(nCrystalHits, _evtWeight);
-    _hCl.rDist      [0]->Fill(clRDist, _evtWeight);
-    _hCl.nCrRDist   [0]->Fill(clRDist, nCrystalHits, _evtWeight);
-    //_hCl.timeRDist  [0]->Fill(clRDist, clTime, _evtWeight);
+    if (ClusterMC->pdgIds().size() == 0){
+      _hCl.pdgIds  [dirId]->Fill(0);
+      _hCl.simPartE [dirId]->Fill(0);
+    }else {
+      for (auto pdgId : ClusterMC->pdgIds() ){
+	_hCl.pdgIds  [dirId]->Fill(pdgId);
+      }    
+      for (auto simE : ClusterMC->eSimParts() ){
+	_hCl.simPartE  [dirId]->Fill(simE);
+      }    
+      
+    }
+    _hCl.energy     [dirId]->Fill(clEnergy, _evtWeight);
+    _hCl.time       [dirId]->Fill(clTime, _evtWeight);
+    _hCl.nCr        [dirId]->Fill(nCrystalHits, _evtWeight);
+    _hCl.rDist      [dirId]->Fill(clRDist, _evtWeight);
+    _hCl.nCrRDist   [dirId]->Fill(clRDist, nCrystalHits, _evtWeight);
+    //_hCl.timeRDist  [dirId]->Fill(clRDist, clTime, _evtWeight);
 
     if (clEnergy    > 1e-3){
-      _hCl.e1eRatio [0]->Fill(maxECrystal/clEnergy, _evtWeight);
-      _hCl.eRDist   [0]->Fill( clRDist,                   clEnergy, _evtWeight);
-      _hCl.e1eRDist  [0]->Fill( clRDist,       maxECrystal/clEnergy, _evtWeight);
+      _hCl.e1eRatio [dirId]->Fill(maxECrystal/clEnergy, _evtWeight);
+      _hCl.eRDist   [dirId]->Fill( clRDist,                   clEnergy, _evtWeight);
+      _hCl.e1eRDist  [dirId]->Fill( clRDist,       maxECrystal/clEnergy, _evtWeight);
       if (nCrystalHits>=2) {
-	_hCl.e2eRatio [0]->Fill(secondmaxECrystal/clEnergy, _evtWeight);
-	_hCl.e2eRDist [0]->Fill( clRDist, secondmaxECrystal/clEnergy, _evtWeight);
+	_hCl.e2eRatio [dirId]->Fill(secondmaxECrystal/clEnergy, _evtWeight);
+	_hCl.e2eRDist [dirId]->Fill( clRDist, secondmaxECrystal/clEnergy, _evtWeight);
        	if (maxECrystal > 1e-3){
-	  _hCl.e2e1Ratio[0]->Fill(secondmaxECrystal/maxECrystal, _evtWeight);
-	  _hCl.e2e1RDist[0]->Fill( clRDist, secondmaxECrystal/maxECrystal, _evtWeight);
+	  _hCl.e2e1Ratio[dirId]->Fill(secondmaxECrystal/maxECrystal, _evtWeight);
+	  _hCl.e2e1RDist[dirId]->Fill( clRDist, secondmaxECrystal/maxECrystal, _evtWeight);
 	}
 	if (nCrystalHits>=3) {
-	  _hCl.e3eRatio [0]->Fill(thirdmaxECrystal/clEnergy, _evtWeight);
-	  _hCl.e3eRDist  [0]->Fill( clRDist,  thirdmaxECrystal/clEnergy, _evtWeight);
+	  _hCl.e3eRatio [dirId]->Fill(thirdmaxECrystal/clEnergy, _evtWeight);
+	  _hCl.e3eRDist  [dirId]->Fill( clRDist,  thirdmaxECrystal/clEnergy, _evtWeight);
 	}
 	if (nCrystalHits>=4) {
-	  _hCl.e4eRatio [0]->Fill(fourthmaxECrystal/clEnergy, _evtWeight);
-	  _hCl.e4eRDist  [0]->Fill( clRDist,  fourthmaxECrystal/clEnergy, _evtWeight);
+	  _hCl.e4eRatio [dirId]->Fill(fourthmaxECrystal/clEnergy, _evtWeight);
+	  _hCl.e4eRDist  [dirId]->Fill( clRDist,  fourthmaxECrystal/clEnergy, _evtWeight);
 	}
       }
     }
 
-    //fill the cluster info only if this cluster is associated with the generated RPC photon
-    if ( ( _evtWithPhoton )           && 
-	 (fabs(_vdetT - clTime) < 6)){
-      _hCl.energy     [1]->Fill(clEnergy, _evtWeight);
-      _hCl.time       [1]->Fill(clTime, _evtWeight);
-      _hCl.nCr        [1]->Fill(nCrystalHits, _evtWeight);
-      _hCl.rDist      [1]->Fill(clRDist, _evtWeight);
-      _hCl.nCrRDist   [1]->Fill(clRDist, nCrystalHits, _evtWeight);
-      //_hCl.timeRDist  [1]->Fill(clRDist, clTime, _evtWeight);
+    // //fill the cluster info only if this cluster is associated with the generated RPC photon
+    // // if ( ( _evtWithPhoton )           && 
+    // // 	 (fabs(_vdetT - clTime) < 6)){
+    // if ( ClusterMC->hasPhoton()){
+    //   _hCl.energy     [1]->Fill(clEnergy, _evtWeight);
+    //   _hCl.time       [1]->Fill(clTime, _evtWeight);
+    //   _hCl.nCr        [1]->Fill(nCrystalHits, _evtWeight);
+    //   _hCl.rDist      [1]->Fill(clRDist, _evtWeight);
+    //   _hCl.nCrRDist   [1]->Fill(clRDist, nCrystalHits, _evtWeight);
+    //   //_hCl.timeRDist  [1]->Fill(clRDist, clTime, _evtWeight);
 
-      if (clEnergy    > 1e-3){
-	_hCl.e1eRatio   [1]->Fill(maxECrystal/clEnergy, _evtWeight);
-	_hCl.eRDist     [1]->Fill( clRDist,                   clEnergy, _evtWeight);
-	_hCl.e1eRDist    [1]->Fill( clRDist,       maxECrystal/clEnergy, _evtWeight);
-	if (nCrystalHits>=2) {
-	  _hCl.e2eRatio   [1]->Fill(secondmaxECrystal/clEnergy, _evtWeight);
-	  _hCl.e2eRDist  [1]->Fill( clRDist, secondmaxECrystal/clEnergy, _evtWeight);
-	  if (maxECrystal > 1e-3){
-	    _hCl.e2e1Ratio  [1]->Fill(secondmaxECrystal/maxECrystal, _evtWeight);
-	    _hCl.e2e1RDist  [1]->Fill( clRDist, secondmaxECrystal/maxECrystal, _evtWeight);
-	  }
-	  if (nCrystalHits>=3) {
-	    _hCl.e3eRatio   [1]->Fill(thirdmaxECrystal/clEnergy, _evtWeight);
-	    _hCl.e3eRDist    [1]->Fill( clRDist,  thirdmaxECrystal/clEnergy, _evtWeight);
-	  }
-	  if (nCrystalHits>=4) {
-	    _hCl.e4eRatio   [1]->Fill(fourthmaxECrystal/clEnergy, _evtWeight);
-	    _hCl.e4eRDist    [1]->Fill( clRDist,  fourthmaxECrystal/clEnergy, _evtWeight);
-	  }
-	}
-      }
-    }
-    //fill the cluster info only if this cluster is associated with an electron
-    if ( ( _evtWithElectron )           && 
-	 ( fabs(_vdetT_e - clTime) < 6)){
-      _hCl.energy     [2]->Fill(clEnergy, _evtWeight);
-      _hCl.time       [2]->Fill(clTime, _evtWeight);
-      _hCl.nCr        [2]->Fill(nCrystalHits, _evtWeight);
-      _hCl.rDist      [2]->Fill(clRDist, _evtWeight);
-      _hCl.nCrRDist   [2]->Fill(clRDist, nCrystalHits, _evtWeight);
-      // _hCl.timeRDist  [2]->Fill(clRDist, clTime, _evtWeight);
+    //   if (clEnergy    > 1e-3){
+    // 	_hCl.e1eRatio   [1]->Fill(maxECrystal/clEnergy, _evtWeight);
+    // 	_hCl.eRDist     [1]->Fill( clRDist,                   clEnergy, _evtWeight);
+    // 	_hCl.e1eRDist    [1]->Fill( clRDist,       maxECrystal/clEnergy, _evtWeight);
+    // 	if (nCrystalHits>=2) {
+    // 	  _hCl.e2eRatio   [1]->Fill(secondmaxECrystal/clEnergy, _evtWeight);
+    // 	  _hCl.e2eRDist  [1]->Fill( clRDist, secondmaxECrystal/clEnergy, _evtWeight);
+    // 	  if (maxECrystal > 1e-3){
+    // 	    _hCl.e2e1Ratio  [1]->Fill(secondmaxECrystal/maxECrystal, _evtWeight);
+    // 	    _hCl.e2e1RDist  [1]->Fill( clRDist, secondmaxECrystal/maxECrystal, _evtWeight);
+    // 	  }
+    // 	  if (nCrystalHits>=3) {
+    // 	    _hCl.e3eRatio   [1]->Fill(thirdmaxECrystal/clEnergy, _evtWeight);
+    // 	    _hCl.e3eRDist    [1]->Fill( clRDist,  thirdmaxECrystal/clEnergy, _evtWeight);
+    // 	  }
+    // 	  if (nCrystalHits>=4) {
+    // 	    _hCl.e4eRatio   [1]->Fill(fourthmaxECrystal/clEnergy, _evtWeight);
+    // 	    _hCl.e4eRDist    [1]->Fill( clRDist,  fourthmaxECrystal/clEnergy, _evtWeight);
+    // 	  }
+    // 	}
+    //   }
+    // }
+    // //fill the cluster info only if this cluster is associated with an electron
+    // if ( ClusterMC->hasEMinus() || ClusterMC->hasEPlus()){
+    //   _hCl.energy     [2]->Fill(clEnergy, _evtWeight);
+    //   _hCl.time       [2]->Fill(clTime, _evtWeight);
+    //   _hCl.nCr        [2]->Fill(nCrystalHits, _evtWeight);
+    //   _hCl.rDist      [2]->Fill(clRDist, _evtWeight);
+    //   _hCl.nCrRDist   [2]->Fill(clRDist, nCrystalHits, _evtWeight);
+    //   // _hCl.timeRDist  [2]->Fill(clRDist, clTime, _evtWeight);
 
-      if (clEnergy    > 1e-3){
-	_hCl.e1eRatio   [2]->Fill(maxECrystal/clEnergy, _evtWeight);
-	_hCl.eRDist     [2]->Fill( clRDist,                   clEnergy, _evtWeight);
-	_hCl.e1eRDist    [2]->Fill( clRDist,       maxECrystal/clEnergy, _evtWeight);
-	if (nCrystalHits>=2) {
-	  _hCl.e2eRatio   [2]->Fill(secondmaxECrystal/clEnergy, _evtWeight);
-	  _hCl.e2eRDist  [2]->Fill( clRDist, secondmaxECrystal/clEnergy, _evtWeight);
-	  if (maxECrystal > 1e-3){
-	    _hCl.e2e1Ratio  [2]->Fill(secondmaxECrystal/maxECrystal, _evtWeight);
-	    _hCl.e2e1RDist  [2]->Fill( clRDist, secondmaxECrystal/maxECrystal, _evtWeight);
-	  }
-	  if (nCrystalHits>=3) {
-	    _hCl.e3eRatio   [2]->Fill(thirdmaxECrystal/clEnergy, _evtWeight);
-	    _hCl.e3eRDist    [2]->Fill( clRDist,  thirdmaxECrystal/clEnergy, _evtWeight);
-	  }
-	  if (nCrystalHits>=4) {
-	    _hCl.e4eRatio   [2]->Fill(fourthmaxECrystal/clEnergy, _evtWeight);
-	    _hCl.e4eRDist    [2]->Fill( clRDist,  fourthmaxECrystal/clEnergy, _evtWeight);
-	  }
-	}
-      }
-    }
+    //   if (clEnergy    > 1e-3){
+    // 	_hCl.e1eRatio   [2]->Fill(maxECrystal/clEnergy, _evtWeight);
+    // 	_hCl.eRDist     [2]->Fill( clRDist,                   clEnergy, _evtWeight);
+    // 	_hCl.e1eRDist    [2]->Fill( clRDist,       maxECrystal/clEnergy, _evtWeight);
+    // 	if (nCrystalHits>=2) {
+    // 	  _hCl.e2eRatio   [2]->Fill(secondmaxECrystal/clEnergy, _evtWeight);
+    // 	  _hCl.e2eRDist  [2]->Fill( clRDist, secondmaxECrystal/clEnergy, _evtWeight);
+    // 	  if (maxECrystal > 1e-3){
+    // 	    _hCl.e2e1Ratio  [2]->Fill(secondmaxECrystal/maxECrystal, _evtWeight);
+    // 	    _hCl.e2e1RDist  [2]->Fill( clRDist, secondmaxECrystal/maxECrystal, _evtWeight);
+    // 	  }
+    // 	  if (nCrystalHits>=3) {
+    // 	    _hCl.e3eRatio   [2]->Fill(thirdmaxECrystal/clEnergy, _evtWeight);
+    // 	    _hCl.e3eRDist    [2]->Fill( clRDist,  thirdmaxECrystal/clEnergy, _evtWeight);
+    // 	  }
+    // 	  if (nCrystalHits>=4) {
+    // 	    _hCl.e4eRatio   [2]->Fill(fourthmaxECrystal/clEnergy, _evtWeight);
+    // 	    _hCl.e4eRDist    [2]->Fill( clRDist,  fourthmaxECrystal/clEnergy, _evtWeight);
+    // 	  }
+    // 	}
+    //   }
+    // }
   }
 
 
@@ -1085,18 +1116,6 @@ namespace mu2e {
     //    if ( !sim.fromGenerator() )   return;
     
     double hitTime = fmod(Step->time() + _toff.totalTimeOffset(simptr), _mbtime);
-    // if (hitTime < _mbbuffer) {
-    //   if (hitTime+_mbtime > _blindTime) {
-    // 	hitTime = hitTime + _mbtime;
-    //   }
-    // }
-    // else {
-    //   if (hitTime > (_mbtime - _mbbuffer)) {
-    // 	if (hitTime - _mbtime > _blindTime) {
-    // 	  hitTime =   hitTime - _mbtime;
-    // 	}
-    //   }
-    // }
 
           	    
     double  hitP  = Step->momentum().mag();
@@ -1147,10 +1166,10 @@ namespace mu2e {
   bool     RPCPhotonAna::filter(art::Event& event) {
 
     ++_nProcess;
-    int  _iev            = event.id().event(); 
+    // int  _iev            = event.id().event(); 
     //skip odd events to build templates. Change to ==1 to make liklyhood histograms
-    if (_iev %2 == 1) 
-      return false;
+    // if (_iev %2 == 1) 
+    //   return false;
 
     //initialize
     _evtWithPhoton    = false;
@@ -1166,6 +1185,12 @@ namespace mu2e {
 
     if (_nProcess%10==0 && _diagLevel > 0) std::cout<<"Processing event from RPCPhotonAna =  "<<_nProcess <<std::endl;
    
+
+    //Calorimeter crystal truth assignment
+    art::Handle<CaloClusterMCTruthAssns> caloClusterTruthHandle;
+    event.getByLabel(_caloClusterTruthModuleLabel, caloClusterTruthHandle);
+    const CaloClusterMCTruthAssns& caloClusterTruth(*caloClusterTruthHandle);
+     
     ConditionsHandle<AcceleratorParams> accPar("ignored");
     _mbtime=accPar->deBuncherPeriod;
     _toff.updateMap(event);
@@ -1242,8 +1267,20 @@ namespace mu2e {
       int iSection = cluster->diskId();
 
       if (iSection == 1)                continue;
+      ClusterContentMC contentMC(*_calorimeter, caloClusterTruth, *cluster, 20.);
 
-      fillClusterHistograms(cluster);
+      //fill all the clusters in the first disk
+      fillClusterHistograms(cluster, &contentMC, 0);
+
+      //fill the clusters that contain a photon
+      if ( contentMC.hasPhoton()){
+	fillClusterHistograms(cluster, &contentMC, 1);
+      }
+
+      //fill the clusters that contain a electron/positron
+      if ( contentMC.hasEMinus() || contentMC.hasEPlus()){
+	fillClusterHistograms(cluster, &contentMC, 2);      
+      }
     }
      //now fill the likelihood distributions
     fillLHHistograms  (&caloClusters);
